@@ -2022,7 +2022,8 @@ function _edit(ctx, map, allMaps){
         right.appendChild(el("div",{class:"muted", style:"font-size:11px;margin-top:2px;margin-bottom:6px"}, "Click Add to place on map, then drag to position."));
         const radList = el("div",{style:"display:flex;flex-direction:column;gap:5px"});
         for(const radio of liveRadios){
-          const alreadyPlaced = ctx.state.maps._draftReceivers.some(r => (r.source && r.source === radio.source) || (r.label && radio.name && r.label.toLowerCase() === radio.name.toLowerCase()) || r.id === radio.source);
+          const placedRx = ctx.state.maps._draftReceivers.find(r => (r.source && r.source === radio.source) || (r.label && radio.name && r.label.toLowerCase() === radio.name.toLowerCase()) || r.id === radio.source) || null;
+          const alreadyPlaced = !!placedRx;
           const sid = _sid(radio.source || "");
           const borderColor = radio.disabled ? "#5b3b7a" : radio.lost ? "#7d5c2b" : "#1b3526";
           const bg = radio.disabled ? "rgba(148,100,220,.06)" : radio.lost ? "rgba(245,158,11,.06)" : "#0a150e";
@@ -2048,10 +2049,9 @@ function _edit(ctx, map, allMaps){
             // receiver, same draft, same Save Layout persistence). Identity,
             // coordinates and all other properties preserved — only room/label
             // edits change until Save. No backend/schema change.
-            const _matchRx = ctx.state.maps._draftReceivers.find(r => (r.source && r.source === radio.source) || (r.label && radio.name && r.label.toLowerCase() === radio.name.toLowerCase()) || r.id === radio.source) || null;
             row.appendChild(el("span",{style:"font-size:10px;color:#52b788;white-space:nowrap"}, "✓ placed"));
             row.appendChild(el("button",{class:"btn inline", style:"font-size:10px;padding:2px 8px;white-space:nowrap", onclick:()=>{
-              if(_matchRx){ ctx.state.maps._selectedRxId = _matchRx.id; renderAll(); renderTools(); }
+              ctx.state.maps._selectedRxId = placedRx.id; renderAll(); renderTools();
             }}, "Edit"));
           } else {
             row.appendChild(el("button",{class:"btn inline", style:"font-size:10px;padding:2px 8px;white-space:nowrap", onclick:()=>{
@@ -3192,7 +3192,8 @@ function _layoutText(receivers, roomBounds){
 // onTap callback selects the receiver on a tap (no drag) — the mobile
 // equivalent of the desktop marker click, which touch browsers suppress after
 // a preventDefault'd touchstart. Movement beyond _TAP_PX cancels the tap so a
-// real drag never selects mid-gesture. The drag/commit path itself is
+// real drag never selects mid-gesture; movement below it is never applied, so
+// a tap never moves the receiver. The drag/commit path itself is
 // untouched by this change (see companion PR #74 for the touch-drag fix).
 function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null, onDragState=null, onTap=null){
   let dragging = false;
@@ -3215,6 +3216,12 @@ function _makeDraggable(node, receiver, container, onMoved=null, isEnabled=null,
     const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
     const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
     if(Math.abs(clientX - _tapX) > _TAP_PX || Math.abs(clientY - _tapY) > _TAP_PX) _tapMoved = true;
+    // Arm the move only once this is genuinely a drag. Below the threshold
+    // nothing is applied, so a tap (or a fingertip's jitter under it) can
+    // never nudge the receiver — the same rule the Lights map's hex drag
+    // uses. Without this a jittery tap both selected AND moved the receiver
+    // by up to _TAP_PX, silently, and Save Layout persisted the nudge.
+    if(!_tapMoved) return;
     const x = (clientX - rect.left)/rect.width;
     const y = (clientY - rect.top)/rect.height;
     receiver.x = clamp01(x);
