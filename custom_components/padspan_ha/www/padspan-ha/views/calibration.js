@@ -465,7 +465,11 @@ function _calibSearchSelect(opts) {
     const q = (query || "").toLowerCase().trim();
     const filtered = q ? items.filter((i) => i.search.includes(q)) : items;
     if (!filtered.length) {
-      list.appendChild(_row(q ? emptyText : noItemsText, true));
+      const note = _row(q ? emptyText : noItemsText, true);
+      // A presentational row is silent to screen readers; announce it.
+      note.setAttribute("role", "status");
+      note.setAttribute("aria-live", "polite");
+      list.appendChild(note);
       return;
     }
     // Preserve the native optgroup cue when unfiltered and both groups exist.
@@ -500,6 +504,10 @@ function _calibSearchSelect(opts) {
     } else {
       for (const item of filtered.slice(0, 50)) _addRow(item);
     }
+    // Typing is intent: highlight the top match so Enter picks it. A bare
+    // focus (empty query) highlights nothing, so Enter can never silently
+    // pick the strongest device the way an implicit row-0 fallback would.
+    if (q && visibleRows.length) { highlighted = 0; _paintHighlight(); }
   };
 
   const _open = () => {
@@ -544,7 +552,8 @@ function _calibSearchSelect(opts) {
       _paintHighlight();
     } else if (key === "Enter") {
       ev.preventDefault();
-      const id = highlighted >= 0 ? visibleIds[highlighted] : visibleIds[0];
+      // Only a highlighted row picks — never an implicit first row.
+      const id = highlighted >= 0 ? visibleIds[highlighted] : undefined;
       if (id !== undefined) _pick(id);
     } else if (key === "Escape") {
       ev.preventDefault();
